@@ -1,76 +1,57 @@
-# DeepSeek AMOLED LSPosed Module
+# DeepSeek AMOLED
 
-An Xposed / LSPosed module that transforms the official **DeepSeek Android App** (`com.deepseek.chat`) into a true, 100% pure AMOLED black (`#000000`) theme.
+LSPosed module targeting the official DeepSeek Android client (`com.deepseek.chat`). Replaces default dark-grey surfaces (`#0F0F0F`, `#1E1E1E`, `#232424`) with solid `#000000` AMOLED black while maintaining text contrast and system bar integration.
 
----
+## Technical Architecture
 
-## Features
+DeepSeek Android is built using Jetpack Compose and Material 3 design tokens:
 
-- **Pure AMOLED Black (`#000000`)**: Replaces the default dark-grey backgrounds (`#0F0F0F` / `#1E1E1E` / `#232424`).
-- **High-Contrast White Typography**: Preserves and enhances text readability (`#F0F0F0`) for all message responses, math equations, code blocks, and user input.
-- **Pure Black Window & System Bars**: Hooks `MainActivity` window to ensure status bar, navigation bar, and decor views are pitch black.
-- **Jetpack Compose Native**: Hooks DeepSeek's custom design tokens (`or2`, `kr2`, `kj6`) and Material 3 `ColorScheme` (`q52`, `qe9`).
+1. **Design Tokens (`kj6` / `rm7`)**:
+   - Patches static 64-bit Compose colors (`ULong`) for main background, surface containers, and elevated cards to `0xFF00000000000000L`.
+2. **Theme Builder (`u2b.t()` / `hqa.t()`)**:
+   - Intercepts theme construction to overwrite background and surface properties while keeping high-contrast typography (`#F0F0F0`) intact.
+3. **Material 3 ColorScheme (`q52` / `oxb.D`)**:
+   - Intercepts constructor parameters:
+     - `background`, `surface`, `surfaceVariant`, and container tiers (`surfaceContainerLowest` through `surfaceContainerHighest`) set to pure black.
+     - `onBackground` and `onSurface` set to `#F0F0F0`.
+4. **Dynamic Scanner**:
+   - Hooks `ClassLoader.loadClass` to identify Jetpack Compose `ColorScheme` constructors by parameter signature, enabling fallback compatibility across minor version bumps.
+5. **Window System Bars**:
+   - Hooks `MainActivity.onCreate` to enforce pure black status bar and navigation bar decor views.
 
----
+## Prerequisites
 
-## Installation
-
-1. Download the latest `deepseek-amoled.apk` from the [Releases](https://github.com/rainyluna/deepseek-amoled/releases) or build it manually.
-2. Install the APK on your device:
-   ```bash
-   adb install -r deepseek-amoled.apk
-   ```
-3. Open **LSPosed Manager**, tap the module notification, and **Enable** the module.
-4. Ensure **DeepSeek** (`com.deepseek.chat`) is selected in the scope.
-5. Force-stop DeepSeek and restart:
-   ```bash
-   adb shell am force-stop com.deepseek.chat
-   adb shell am start -n com.deepseek.chat/.MainActivity
-   ```
-
----
-
-## How It Works
-
-DeepSeek Android is built with **Jetpack Compose** and Material 3:
-
-1. **Design Tokens (`kj6`)**: Contains static long colors:
-   - `kj6.o` (`0xFF0E0F0F`) - Main background
-   - `kj6.t` (`0xFF1E1E1E`) - Surface background
-   - `kj6.w` (`0xFF232424`) - Surface container / input bar
-   - `kj6.j` (`0xFF282929`) - Elevated cards / bubbles
-   The module intercepts these fields and patches them to `COLOR_AMOLED_BLACK` (`0xFF00000000000000L`).
-
-2. **Theme Builder (`u2b.t()`)**:
-   Constructs the dark theme `or2` instance. The module hooks `u2b.t()` and ensures the background and surface fields (`or2.d.c` and `or2.d.g`) are set to pure black while preserving text colors in `or2.a` (`lr2`).
-
-3. **Material 3 ColorScheme (`q52`)**:
-   Intercepts constructor and patches:
-   - `n` (background) -> pure black
-   - `p` (surface) -> pure black
-   - `r` (surfaceVariant) -> pure black
-   - `C`–`I` (surface containers, dim, bright) -> pure black
-   - `o` (onBackground) & `q` (onSurface) -> crisp `#F0F0F0` white text.
-
-4. **Dynamic Scheme Scanner**:
-   Hooks `ClassLoader.loadClass` to identify any class matching `ColorScheme(primary=` constructor signature to survive minor updates automatically.
-
----
+- Android 8.0+ (API 26-36).
+- Working LSPosed / Xposed framework.
+- Java JDK 17.
+- Android SDK Build-Tools (34.0.0+) and Android API 34 platform jar (`android.jar`).
 
 ## Building from Source
 
-### Prerequisites
-- Android SDK (build-tools 34.0.0, android-34 platform)
-- Java JDK 17
-- Bash shell & standard Unix utilities (`zip`, `zipalign`, `apksigner`)
-
 ```bash
+git clone https://github.com/rainyluna/deepseek-amoled.git
+cd deepseek-amoled
 chmod +x build.sh
 ./build.sh
 ```
 
----
+### Build Pipeline
+1. `javac` compiles standalone Xposed stubs in `stubs/`.
+2. `javac` compiles `src/com/vertigo/deepseekamoled/HookEntry.java` against `android.jar` and compiled stubs.
+3. `d8` converts classes into `classes.dex` targeting API 34.
+4. `aapt2` compiles and links package resources and manifest.
+5. `zip` packages DEX and assets into unaligned APK.
+6. `zipalign` 4-byte aligns the package.
+7. `apksigner` signs using debug RSA-2048 keys.
+8. Output artifact: `deepseek-amoled.apk`.
 
-## Updating for New APK Releases
+## Installation
 
-See [UPDATING.md](UPDATING.md) for full instructions on how to decompile, map new ProGuard/R8 class names, and rebuild when DeepSeek updates.
+```bash
+adb install -r deepseek-amoled.apk
+```
+Enable the module in LSPosed Manager, ensure `com.deepseek.chat` is in scope, then force-stop and launch DeepSeek:
+```bash
+adb shell am force-stop com.deepseek.chat
+adb shell am start -n com.deepseek.chat/.MainActivity
+```
