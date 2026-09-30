@@ -32,30 +32,15 @@ jadx --single-class "com.deepseek.chat.MainActivity" -d deepseek_analysis/decomp
 
 ---
 
-## Step 3: Identify the Obfuscated Mapping
+## Step 3: Obfuscated Token Mapping History
 
-1. **Locate Theme Entry Point**:
-   - In `MainActivity.java`, look inside `onCreate()` for `ComponentActivity.setContent` (`d82.a(this, ...)`).
-   - Find the Composable lambda passed to `setContent` (e.g. `zq5`).
-   - Inside that lambda, trace the Compose theme wrapper (tagged with `"com.deepseek.chat.ui.theme.DeepSeekTheme"`).
-
-2. **Locate Palette Class (`kj6`)**:
-   - Find the method building the dark theme (previously `u2b.t()`).
-   - Look for the class containing dark color constants `4279176975L` (`#0E0F0F`), `4280163870L` (`#1E1E1E`), `4280558628L` (`#232424`).
-   - Note the new class name (e.g., `kj6` -> `new_name`) and field names (`o`, `t`, `w`, `j`).
-
-3. **Locate Fallback Material 3 ColorScheme (`qe9`)**:
-   - In `Theme.kt`, look for `"com.deepseek.chat.ui.theme.fallback.fallbackMaterialColorScheme"`.
-   - Find the class holding `static final q52 a` (light) and `static final q52 b` (dark).
-   - Note the new class name (e.g., `qe9` -> `new_name`).
-
-4. **Verify Material 3 ColorScheme Class (`q52`)**:
-   - Search for `"ColorScheme(primary="` in strings:
-     ```bash
-     strings deepseek_analysis/classes.dex | grep "ColorScheme(primary="
-     ```
-   - Check its `toString()` to verify surface field letters (`m` = background, `o` = surface, etc.).
-
+| Token Category | v2.5.x (Legacy) | v2.6.0 (Current) | Description |
+|---|---|---|---|
+| **Palette Class** | `kj6` (`o`, `t`, `w`, `j`) | `rm7` (`o`, `t`, `x`, `j`, `r`, `h`, `i`) | Color constants (`4279176975L` = `#0E0F0F`, `4280163870L` = `#1E1E1E`, `4280558628L` = `#232424`, `4281545523L` = `#323233`) |
+| **Fallback ColorScheme** | `qe9.b` | `hqa.b` | Static holder for fallback dark Material 3 `ColorScheme` |
+| **Dark Theme Builder** | `u2b.t()` | `oxb.D()` | Method constructing the dark theme custom tokens (`fn3`) |
+| **Custom Theme Tokens** | `or2` (field `d` = `kr2`) | `fn3` (field `d` = `cn3`) | Holds background (`c`), surface (`g`), and input container (`a`) |
+| **Material 3 Scheme** | `q52` | `oz2` | M3 `ColorScheme` class (`m`=bg, `n`=onBg, `o`=surface, `p`=onSurface, `q`=surfaceVariant) |
 ---
 
 ## Step 4: Update HookEntry.java

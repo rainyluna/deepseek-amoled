@@ -83,46 +83,126 @@ public class HookEntry implements IXposedHookLoadPackage {
     }
 
     private void hookKnownClasses(final ClassLoader cl) {
-        // --- 1. Palette Color Constants: kj6 ---
-        // Only dark background/surface fields: o, t, w, j
+        // --- 1. Palette Color Constants ---
+        // v2.6.0: rm7 (o=bg #0E0F0F, t=surface #1E1E1E, x=container #232424, r=input #323233, j, h, i)
+        hookPaletteClass(cl, "rm7", new String[]{"o", "t", "x", "j", "r", "h", "i"});
+        // legacy: kj6 (o, t, w, j)
         hookPaletteClass(cl, "kj6", new String[]{"o", "t", "w", "j"});
 
-        // --- 2. Fallback Material Scheme: qe9.b ---
+        // --- 2. Fallback Material Scheme ---
+        // v2.6.0: hqa.b
+        hookFallbackScheme(cl, "hqa", "b");
+        // legacy: qe9.b
+        hookFallbackScheme(cl, "qe9", "b");
+
+        // --- 3. Dark Theme Builder ---
+        // v2.6.0: oxb.D() returning fn3
+        hookThemeBuilder(cl, "oxb", "D", true);
+        // legacy: u2b.t() returning or2
+        hookThemeBuilder(cl, "u2b", "t", false);
+
+        // --- 4. Direct Constructor Hooks ---
+        hookCn3Constructor(cl);
+        hookColorSchemeClass(cl, "oz2");
+        hookColorSchemeClass(cl, "q52");
+    }
+
+    private void hookCn3Constructor(final ClassLoader cl) {
         try {
-            Class<?> qe9Class = XposedHelpers.findClassIfExists("qe9", cl);
-            if (qe9Class != null) {
-                patchQe9(qe9Class);
-                try {
-                    XposedHelpers.findAndHookMethod(qe9Class, "<clinit>", new XC_MethodHook() {
+            Class<?> cn3Class = XposedHelpers.findClassIfExists("cn3", cl);
+            if (cn3Class != null) {
+                for (Constructor<?> ctor : cn3Class.getDeclaredConstructors()) {
+                    XposedBridge.hookMethod(ctor, new XC_MethodHook() {
                         @Override
                         protected void afterHookedMethod(MethodHookParam param) throws Throwable {
-                            patchQe9((Class<?>) param.method.getDeclaringClass());
+                            setLongField(param.thisObject, "c", COLOR_AMOLED_BLACK);
+                            setLongField(param.thisObject, "g", COLOR_AMOLED_BLACK);
+                            setLongField(param.thisObject, "a", COLOR_AMOLED_BLACK);
+                            setLongField(param.thisObject, "h", COLOR_AMOLED_BLACK);
                         }
                     });
-                } catch (Throwable ignored) {}
-                XposedBridge.log(TAG + "Hooked qe9 fallback Material Scheme");
+                }
+                XposedBridge.log(TAG + "Hooked cn3 constructor for AMOLED containers");
             }
         } catch (Throwable t) {
-            XposedBridge.log(TAG + "Note on qe9: " + t.getMessage());
+            XposedBridge.log(TAG + "Note on cn3: " + t.getMessage());
         }
+    }
 
-        // --- 3. Dark Theme Builder: u2b.t() ---
+    private void hookColorSchemeClass(final ClassLoader cl, final String className) {
         try {
-            Class<?> u2bClass = XposedHelpers.findClassIfExists("u2b", cl);
-            if (u2bClass != null) {
-                XposedHelpers.findAndHookMethod(u2bClass, "t", new XC_MethodHook() {
+            Class<?> clazz = XposedHelpers.findClassIfExists(className, cl);
+            if (clazz != null) {
+                for (Constructor<?> ctor : clazz.getDeclaredConstructors()) {
+                    XposedBridge.hookMethod(ctor, new XC_MethodHook() {
+                        @Override
+                        protected void afterHookedMethod(MethodHookParam param) throws Throwable {
+                            patchColorScheme(param.thisObject);
+                        }
+                    });
+                }
+                XposedBridge.log(TAG + "Hooked " + className + " constructor for AMOLED ColorScheme");
+            }
+        } catch (Throwable t) {
+            XposedBridge.log(TAG + "Note on " + className + ": " + t.getMessage());
+        }
+    }
+
+    private void hookThemeBuilder(final ClassLoader cl, final String className, final String methodName, final boolean isFn3) {
+        try {
+            Class<?> clazz = XposedHelpers.findClassIfExists(className, cl);
+            if (clazz != null) {
+                XposedHelpers.findAndHookMethod(clazz, methodName, new XC_MethodHook() {
                     @Override
                     protected void afterHookedMethod(MethodHookParam param) throws Throwable {
-                        Object or2Instance = param.getResult();
-                        if (or2Instance != null) {
-                            patchOr2(or2Instance);
+                        Object result = param.getResult();
+                        if (result != null) {
+                            if (isFn3) {
+                                patchFn3(result);
+                            } else {
+                                patchOr2(result);
+                            }
                         }
                     }
                 });
-                XposedBridge.log(TAG + "Hooked u2b.t() dark theme builder");
+                XposedBridge.log(TAG + "Hooked " + className + "." + methodName + "() dark theme builder");
             }
         } catch (Throwable t) {
-            XposedBridge.log(TAG + "Note on u2b.t: " + t.getMessage());
+            XposedBridge.log(TAG + "Note on " + className + "." + methodName + ": " + t.getMessage());
+        }
+    }
+
+    private void hookFallbackScheme(final ClassLoader cl, final String className, final String fieldName) {
+        try {
+            Class<?> clazz = XposedHelpers.findClassIfExists(className, cl);
+            if (clazz != null) {
+                patchFallbackStatic(clazz, fieldName);
+                try {
+                    XposedHelpers.findAndHookMethod(clazz, "<clinit>", new XC_MethodHook() {
+                        @Override
+                        protected void afterHookedMethod(MethodHookParam param) throws Throwable {
+                            patchFallbackStatic((Class<?>) param.method.getDeclaringClass(), fieldName);
+                        }
+                    });
+                } catch (Throwable ignored) {}
+                XposedBridge.log(TAG + "Hooked " + className + "." + fieldName + " fallback Material Scheme");
+            }
+        } catch (Throwable t) {
+            XposedBridge.log(TAG + "Note on " + className + ": " + t.getMessage());
+        }
+    }
+
+    private static void patchFallbackStatic(Class<?> clazz, String fieldName) {
+        if (clazz == null) return;
+        try {
+            Field f = clazz.getDeclaredField(fieldName);
+            f.setAccessible(true);
+            Object darkScheme = f.get(null);
+            if (darkScheme != null) {
+                patchColorScheme(darkScheme);
+            }
+        } catch (Throwable t) {
+            XposedBridge.log(TAG + "Error patching " + clazz.getSimpleName() + "." + fieldName + ": " + t.getMessage());
         }
     }
 
@@ -158,10 +238,43 @@ public class HookEntry implements IXposedHookLoadPackage {
         }
     }
 
+    private static void patchFn3(Object fn3Instance) {
+        if (fn3Instance == null) return;
+        try {
+            // In fn3 (v2.6.0):
+            // d is cn3 (background and surface container tokens)
+            // NEVER touch fn3.a or fn3.e because they contain text/content colors!
+            Field dField = fn3Instance.getClass().getDeclaredField("d");
+            dField.setAccessible(true);
+            Object cn3Obj = dField.get(fn3Instance);
+            if (cn3Obj != null) {
+                // In cn3:
+                // a=j10 (input bg), b=j11, c=j12 (background rm7.o), d=j9, e=j8, f=j9, g=j13 (surface rm7.t), h=j10, i=j8, j=j11
+                setLongField(cn3Obj, "c", COLOR_AMOLED_BLACK);
+                setLongField(cn3Obj, "g", COLOR_AMOLED_BLACK);
+                setLongField(cn3Obj, "a", COLOR_AMOLED_BLACK);
+                setLongField(cn3Obj, "h", COLOR_AMOLED_BLACK);
+            }
+            try {
+                Field gField = fn3Instance.getClass().getDeclaredField("g");
+                gField.setAccessible(true);
+                Object dn3Obj = gField.get(fn3Instance);
+                if (dn3Obj != null) {
+                    setLongField(dn3Obj, "a", COLOR_AMOLED_BLACK);
+                    setLongField(dn3Obj, "f", COLOR_AMOLED_BLACK);
+                    setLongField(dn3Obj, "g", COLOR_AMOLED_BLACK);
+                    setLongField(dn3Obj, "h", COLOR_AMOLED_BLACK);
+                }
+            } catch (Throwable ignored) {}
+        } catch (Throwable t) {
+            XposedBridge.log(TAG + "Error patching fn3: " + t.getMessage());
+        }
+    }
+
     private static void patchOr2(Object or2Instance) {
         if (or2Instance == null) return;
         try {
-            // In or2:
+            // In or2 (legacy):
             // d is kr2 (background and surface container tokens)
             // NEVER touch or2.a (lr2) because it contains text/content colors (LocalContentColor)!
             Field dField = or2Instance.getClass().getDeclaredField("d");
@@ -187,40 +300,36 @@ public class HookEntry implements IXposedHookLoadPackage {
         } catch (Throwable ignored) {}
     }
 
-    private static void patchQe9(Class<?> qe9Class) {
-        if (qe9Class == null) return;
-        try {
-            Field bField = qe9Class.getDeclaredField("b");
-            bField.setAccessible(true);
-            Object darkScheme = bField.get(null);
-            if (darkScheme != null) {
-                patchColorScheme(darkScheme);
-            }
-        } catch (Throwable t) {
-            XposedBridge.log(TAG + "Error patching qe9.b: " + t.getMessage());
-        }
-    }
-
     private static void patchColorScheme(Object colorScheme) {
         if (colorScheme == null) return;
-        // In Material 3 ColorScheme (q52 in DeepSeek):
-        // n = background, p = surface, r = surfaceVariant,
-        // C = surfaceBright, D = surfaceDim, E = surfaceContainer,
-        // F = surfaceContainerHigh, G = surfaceContainerHighest,
-        // H = surfaceContainerLow, I = surfaceContainerLowest
-        // (NOTE: o is onBackground and q is onSurface - DO NOT MAKE THEM BLACK!)
-        String[] surfaceFields = {"n", "p", "r", "C", "D", "E", "F", "G", "H", "I"};
-        Class<?> cl = colorScheme.getClass();
-        for (String fieldName : surfaceFields) {
-            try {
-                Field f = cl.getDeclaredField(fieldName);
-                f.setAccessible(true);
-                f.setLong(colorScheme, COLOR_AMOLED_BLACK);
-            } catch (Throwable ignored) {}
+        String simpleName = colorScheme.getClass().getSimpleName();
+        if ("oz2".equals(simpleName)) {
+            // In oz2 (v2.6.0 Material 3 ColorScheme):
+            // m = background, o = surface, q = surfaceVariant
+            // C = surfaceBright, D = surfaceDim, E = surfaceContainer
+            // F = surfaceContainerHigh, G = surfaceContainerHighest
+            // H = surfaceContainerLow, I = surfaceContainerLowest
+            String[] surfaceFields = {"m", "o", "q", "C", "D", "E", "F", "G", "H", "I"};
+            for (String fieldName : surfaceFields) {
+                setLongField(colorScheme, fieldName, COLOR_AMOLED_BLACK);
+            }
+            // n = onBackground, p = onSurface (crisp white text)
+            setLongField(colorScheme, "n", COLOR_WHITE_TEXT);
+            setLongField(colorScheme, "p", COLOR_WHITE_TEXT);
+        } else {
+            // In q52 (legacy Material 3 ColorScheme):
+            // n = background, p = surface, r = surfaceVariant
+            // C = surfaceBright, D = surfaceDim, E = surfaceContainer
+            // F = surfaceContainerHigh, G = surfaceContainerHighest
+            // H = surfaceContainerLow, I = surfaceContainerLowest
+            String[] surfaceFields = {"n", "p", "r", "C", "D", "E", "F", "G", "H", "I"};
+            for (String fieldName : surfaceFields) {
+                setLongField(colorScheme, fieldName, COLOR_AMOLED_BLACK);
+            }
+            // o = onBackground, q = onSurface
+            setLongField(colorScheme, "o", COLOR_WHITE_TEXT);
+            setLongField(colorScheme, "q", COLOR_WHITE_TEXT);
         }
-        // Ensure onBackground (o) and onSurface (q) are crisp white text
-        setLongField(colorScheme, "o", COLOR_WHITE_TEXT);
-        setLongField(colorScheme, "q", COLOR_WHITE_TEXT);
     }
 
     /**
@@ -239,13 +348,36 @@ public class HookEntry implements IXposedHookLoadPackage {
                         return;
                     }
 
-                    if ("kj6".equals(name)) {
+                    if ("rm7".equals(name)) {
+                        patchStaticPalette(loadedClass, new String[]{"o", "t", "x", "j", "r", "h", "i"});
+                    } else if ("kj6".equals(name)) {
                         patchStaticPalette(loadedClass, new String[]{"o", "t", "w", "j"});
-                    } else if ("qe9".equals(name)) {
-                        patchQe9(loadedClass);
+                    } else if ("hqa".equals(name) || "qe9".equals(name)) {
+                        patchFallbackStatic(loadedClass, "b");
+                    } else if ("cn3".equals(name)) {
+                        for (Constructor<?> ctor : loadedClass.getDeclaredConstructors()) {
+                            XposedBridge.hookMethod(ctor, new XC_MethodHook() {
+                                @Override
+                                protected void afterHookedMethod(MethodHookParam param) throws Throwable {
+                                    setLongField(param.thisObject, "c", COLOR_AMOLED_BLACK);
+                                    setLongField(param.thisObject, "g", COLOR_AMOLED_BLACK);
+                                    setLongField(param.thisObject, "a", COLOR_AMOLED_BLACK);
+                                    setLongField(param.thisObject, "h", COLOR_AMOLED_BLACK);
+                                }
+                            });
+                        }
+                    } else if ("oz2".equals(name) || "q52".equals(name)) {
+                        for (Constructor<?> ctor : loadedClass.getDeclaredConstructors()) {
+                            XposedBridge.hookMethod(ctor, new XC_MethodHook() {
+                                @Override
+                                protected void afterHookedMethod(MethodHookParam param) throws Throwable {
+                                    patchColorScheme(param.thisObject);
+                                }
+                            });
+                        }
                     }
 
-                    // Check if class is Material 3 ColorScheme
+                    // Dynamic catch-all for any unknown ColorScheme constructor
                     try {
                         Method toStringMethod = loadedClass.getDeclaredMethod("toString");
                         if (toStringMethod != null && !Modifier.isAbstract(loadedClass.getModifiers())) {
